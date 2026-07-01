@@ -1,0 +1,5 @@
+{
+  "name": "Device Key Manager",
+  "description": "Next.js application for managing device keys via Google Apps Script integration.",
+  "requestFramePermissions": []
+}
