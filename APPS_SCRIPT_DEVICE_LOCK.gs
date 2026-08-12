@@ -215,6 +215,7 @@ function computeExpiresAt(plan, customDays) {
   if (normalizedPlan === 'forever') return '';
   let days = 30;
   if (normalizedPlan === '2m') days = 60;
+  if (normalizedPlan === '1y') days = 365;
   if (normalizedPlan === 'custom') days = Math.max(1, Number(customDays || 0));
   return addDays(new Date(), days);
 }
