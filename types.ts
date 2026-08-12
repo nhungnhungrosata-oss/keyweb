@@ -1,6 +1,7 @@
 export enum PlanType {
   ONE_MONTH = '1m',
   TWO_MONTHS = '2m',
+  ONE_YEAR = '1y',
   FOREVER = 'forever',
   CUSTOM = 'custom',
 }

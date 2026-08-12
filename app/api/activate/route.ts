@@ -21,6 +21,8 @@ export async function POST(req: NextRequest) {
   try {
     const payload = await req.json().catch(() => ({}));
     const { device_key, plan, custom_days, note } = payload;
+    const appsScriptPlan = plan === "1y" ? "custom" : plan;
+    const appsScriptCustomDays = plan === "1y" ? 365 : custom_days;
 
     if (!device_key || !String(device_key).trim()) {
       return NextResponse.json({ ok: false, error: "Thiếu device_key" }, { status: 400 });
@@ -44,8 +46,8 @@ export async function POST(req: NextRequest) {
         secret: ADMIN_SECRET,
         ...payload,
         device_key: String(device_key).trim(),
-        plan,
-        custom_days,
+        plan: appsScriptPlan,
+        custom_days: appsScriptCustomDays,
         max_installations: 3,
         note,
       }),

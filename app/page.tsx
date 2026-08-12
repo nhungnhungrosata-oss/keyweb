@@ -32,6 +32,7 @@ export default function Page() {
   const plans = [
     { value: PlanType.ONE_MONTH, label: '1 tháng' },
     { value: PlanType.TWO_MONTHS, label: '2 tháng' },
+    { value: PlanType.ONE_YEAR, label: '1 năm' },
     { value: PlanType.FOREVER, label: 'Vĩnh viễn' },
     { value: PlanType.CUSTOM, label: 'Tùy nhập' },
   ];

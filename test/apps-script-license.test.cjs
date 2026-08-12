@@ -105,6 +105,23 @@ test('license cho phép ba trình duyệt và từ chối trình duyệt thứ t
   assert.equal(fourth.installations_used, 3);
 });
 
+test('gói 1 năm có thời hạn đúng 365 ngày', () => {
+  const script = createRuntime();
+  const beforeActivation = Date.now();
+  const activated = script.activateLicense({
+    device_key: 'IBEGEN-ONE-YEAR',
+    secret: 'test-secret',
+    plan: '1y',
+  });
+  const afterActivation = Date.now();
+  const expiresAt = new Date(activated.data.expires_at).getTime();
+  const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+
+  assert.equal(activated.data.plan, '1y');
+  assert.ok(expiresAt >= beforeActivation + oneYearMs);
+  assert.ok(expiresAt <= afterActivation + oneYearMs);
+});
+
 test('reset xóa slot nhưng giữ license ACTIVE', () => {
   const script = createRuntime();
   script.activateLicense({ device_key: 'IBEGEN-RESET', secret: 'test-secret', plan: 'forever' });
