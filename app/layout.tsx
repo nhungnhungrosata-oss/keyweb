@@ -1,8 +1,8 @@
 import React from 'react';
 
 export const metadata = {
-  title: 'Device Key Manager',
-  description: 'Next.js application for managing device keys',
+  title: 'Quản trị license Veoday',
+  description: 'Kích hoạt và quản lý license Veoday',
 };
 
 export default function RootLayout({
@@ -12,15 +12,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi">
-      <head>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        {/* Using Tailwind CDN as requested to match original styling method */}
-        <script src="https://cdn.tailwindcss.com"></script>
-      </head>
-      <body>
-        <div id="root">{children}</div>
-      </body>
+      <body style={{ margin: 0, background: '#f8fafc', color: '#0f172a' }}>{children}</body>
     </html>
   );
 }

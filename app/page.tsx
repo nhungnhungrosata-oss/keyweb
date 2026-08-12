@@ -1,56 +1,94 @@
 'use client';
 
-import React, { useState } from 'react';
-import { PlanType, ApiResponse } from '../types';
+import React, { FormEvent, useEffect, useState } from 'react';
+import { ApiResponse, PlanType } from '../types';
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  borderRadius: 10,
+  border: '1px solid #d1d5db',
+  boxSizing: 'border-box',
+};
 
 export default function Page() {
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
   const [deviceKey, setDeviceKey] = useState('');
   const [plan, setPlan] = useState<PlanType>(PlanType.ONE_MONTH);
-  const [customDays, setCustomDays] = useState<string>('');
+  const [customDays, setCustomDays] = useState('');
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ApiResponse | null>(null);
 
+  useEffect(() => {
+    fetch('/api/admin/session', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((data) => setAuthenticated(data?.authenticated === true))
+      .catch(() => setAuthenticated(false));
+  }, []);
+
   const plans = [
-    { value: PlanType.ONE_MONTH, label: '1 tháng (1m)' },
-    { value: PlanType.TWO_MONTHS, label: '2 tháng (2m)' },
-    { value: PlanType.FOREVER, label: 'Vĩnh viễn (forever)' },
-    { value: PlanType.CUSTOM, label: 'Tùy nhập (custom)' },
+    { value: PlanType.ONE_MONTH, label: '1 tháng' },
+    { value: PlanType.TWO_MONTHS, label: '2 tháng' },
+    { value: PlanType.FOREVER, label: 'Vĩnh viễn' },
+    { value: PlanType.CUSTOM, label: 'Tùy nhập' },
   ];
 
-  const handleApiCall = async (endpoint: string, body: any) => {
+  const onLogin = async (event: FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    setLoginError('');
+    try {
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.ok !== true) {
+        setLoginError(data?.error || 'Không đăng nhập được');
+        return;
+      }
+      setPassword('');
+      setAuthenticated(true);
+    } catch {
+      setLoginError('Không kết nối được máy chủ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onLogout = async () => {
+    await fetch('/api/admin/logout', { method: 'POST' }).catch(() => undefined);
+    setAuthenticated(false);
+    setResult(null);
+  };
+
+  const handleApiCall = async (endpoint: string, body: Record<string, unknown>) => {
     setLoading(true);
     setResult(null);
     try {
       const response = await fetch(`/api/${endpoint}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-
-      const data = await response.json();
-
-      // ✅ Chuẩn hoá response để UI luôn hiểu đúng (Apps Script trả { ok: true/false })
-      if (typeof (data as any)?.success === 'boolean') {
-        setResult(data);
-      } else if (typeof (data as any)?.ok === 'boolean') {
-        const ok = (data as any).ok === true;
-        setResult({
-          success: ok,
-          message: ok ? 'Thành công' : ((data as any).error || 'Thất bại'),
-          data: data,
-          error: ok ? undefined : (data as any).error,
-        });
-      } else {
-        // fallback
-        setResult({
-          success: response.ok,
-          message: response.ok ? 'Thành công' : 'Thất bại',
-          data: data,
-        });
+      const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        setAuthenticated(false);
+        setLoginError('Phiên quản trị đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
       }
+
+      const success = typeof data?.success === 'boolean' ? data.success : data?.ok === true;
+      setResult({
+        success,
+        message: data?.message || data?.error || (success ? 'Thành công' : 'Thất bại'),
+        data,
+        error: success ? undefined : data?.error,
+      });
     } catch (error) {
       setResult({
         success: false,
@@ -62,161 +100,105 @@ export default function Page() {
     }
   };
 
-  const onCheck = () => {
-    if (!deviceKey.trim()) {
-      alert('Vui lòng nhập Device Key');
-      return;
-    }
-    handleApiCall('check', { device_key: deviceKey.trim() });
+  const normalizedKey = deviceKey.trim().toUpperCase();
+  const requireKey = () => {
+    if (normalizedKey) return true;
+    alert('Vui lòng nhập mã license');
+    return false;
   };
 
-  const onActivate = () => {
-    if (!deviceKey.trim()) {
-      alert('Vui lòng nhập Device Key');
-      return;
-    }
-    if (plan === PlanType.CUSTOM) {
-      const days = Number(customDays);
-      if (!days || days <= 0) {
-        alert('Vui lòng nhập số ngày hợp lệ');
-        return;
-      }
-      handleApiCall('activate', {
-        device_key: deviceKey.trim(),
-        plan,
-        custom_days: days,
-        note: note || undefined,
-      });
-      return;
-    }
+  if (authenticated === null) {
+    return <main style={{ padding: 40, fontFamily: 'system-ui, sans-serif' }}>Đang kiểm tra phiên quản trị…</main>;
+  }
 
-    handleApiCall('activate', {
-      device_key: deviceKey.trim(),
-      plan,
-      note: note || undefined,
-    });
-  };
-
-  const onRevoke = () => {
-    if (!deviceKey.trim()) {
-      alert('Vui lòng nhập Device Key');
-      return;
-    }
-    handleApiCall('revoke', { device_key: deviceKey.trim() });
-  };
-
-  const onResetDevice = () => {
-    if (!deviceKey.trim()) {
-      alert('Vui lòng nhập Device Key');
-      return;
-    }
-    if (!confirm('Reset thiết bị cho key này? Key vẫn ACTIVE nhưng sẽ cho phép gắn với thiết bị mới ở lần kiểm tra tiếp theo.')) return;
-    handleApiCall('reset-device', { device_key: deviceKey.trim() });
-  };
+  if (!authenticated) {
+    return (
+      <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 16, background: '#f1f5f9', fontFamily: 'system-ui, sans-serif' }}>
+        <form onSubmit={onLogin} style={{ width: 'min(420px, 100%)', background: '#fff', padding: 24, borderRadius: 16, boxShadow: '0 16px 45px rgba(15,23,42,.12)' }}>
+          <h1 style={{ margin: '0 0 8px', fontSize: 24 }}>Quản trị license</h1>
+          <p style={{ margin: '0 0 18px', color: '#64748b' }}>Nhập ADMIN_SECRET để tiếp tục.</p>
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Mật khẩu quản trị"
+            style={inputStyle}
+          />
+          {loginError && <div style={{ color: '#b91c1c', marginTop: 10 }}>{loginError}</div>}
+          <button type="submit" disabled={loading || !password} style={{ width: '100%', marginTop: 14, padding: 11, border: 0, borderRadius: 10, background: '#0f172a', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+            {loading ? 'Đang đăng nhập…' : 'Đăng nhập'}
+          </button>
+        </form>
+      </main>
+    );
+  }
 
   return (
-    <div style={{ maxWidth: 720, margin: '40px auto', padding: 16, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
-      <h2 style={{ marginBottom: 16 }}>Kích hoạt Key</h2>
-
-      <div style={{ display: 'grid', gap: 12, background: '#fff', padding: 16, borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
+    <main style={{ maxWidth: 760, margin: '40px auto', padding: 16, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <div>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Device Key</div>
-          <input
-            value={deviceKey}
-            onChange={(e) => setDeviceKey(e.target.value)}
-            placeholder="Nhập Device Key"
-            style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd' }}
-          />
+          <h1 style={{ margin: 0, fontSize: 26 }}>Quản trị license</h1>
+          <div style={{ color: '#64748b', marginTop: 4 }}>Mỗi license dùng tối đa 3 trình duyệt.</div>
         </div>
+        <button onClick={onLogout} style={{ padding: '8px 12px', borderRadius: 9, border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer' }}>Đăng xuất</button>
+      </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div>
+      <section style={{ display: 'grid', gap: 12, background: '#fff', padding: 18, borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,0.08)' }}>
+        <label>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>Mã license</div>
+          <input value={deviceKey} onChange={(event) => setDeviceKey(event.target.value)} placeholder="IBEGEN-XXXX-XXXX-XXXX" style={inputStyle} />
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          <label>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>Gói</div>
-            <select
-              value={plan}
-              onChange={(e) => setPlan(e.target.value as PlanType)}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd' }}
-            >
-              {plans.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
+            <select value={plan} onChange={(event) => setPlan(event.target.value as PlanType)} style={inputStyle}>
+              {plans.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
-          </div>
-
+          </label>
           {plan === PlanType.CUSTOM && (
-            <div>
+            <label>
               <div style={{ fontWeight: 600, marginBottom: 6 }}>Số ngày</div>
-              <input
-                value={customDays}
-                onChange={(e) => setCustomDays(e.target.value)}
-                placeholder="Ví dụ: 15"
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd' }}
-              />
-            </div>
+              <input type="number" min="1" value={customDays} onChange={(event) => setCustomDays(event.target.value)} placeholder="Ví dụ: 15" style={inputStyle} />
+            </label>
           )}
         </div>
 
-        <div>
+        <label>
           <div style={{ fontWeight: 600, marginBottom: 6 }}>Ghi chú</div>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Ghi chú (tuỳ chọn)"
-            style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd' }}
-          />
+          <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ghi chú (tùy chọn)" style={inputStyle} />
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginTop: 4 }}>
+          <button disabled={loading} onClick={() => requireKey() && handleApiCall('check', { device_key: normalizedKey })} style={buttonStyle('#475569')}>Kiểm tra</button>
+          <button disabled={loading} onClick={() => {
+            if (!requireKey()) return;
+            const days = Number(customDays);
+            if (plan === PlanType.CUSTOM && (!days || days <= 0)) return alert('Vui lòng nhập số ngày hợp lệ');
+            void handleApiCall('activate', { device_key: normalizedKey, plan, custom_days: plan === PlanType.CUSTOM ? days : undefined, note: note || undefined });
+          }} style={buttonStyle('#16a34a')}>Kích hoạt</button>
+          <button disabled={loading} onClick={() => requireKey() && confirm('Thu hồi license này?') && handleApiCall('revoke', { device_key: normalizedKey })} style={buttonStyle('#dc2626')}>Thu hồi</button>
+          <button disabled={loading} onClick={() => requireKey() && confirm('Reset toàn bộ trình duyệt của license này?') && handleApiCall('reset-device', { device_key: normalizedKey })} style={buttonStyle('#f59e0b', '#111827')}>Reset trình duyệt</button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 6 }}>
-          <button
-            onClick={onCheck}
-            disabled={loading}
-            style={{ padding: '10px 12px', borderRadius: 10, border: '0', background: '#4b5563', color: '#fff', fontWeight: 700 }}
-          >
-            Kiểm tra
-          </button>
-          <button
-            onClick={onActivate}
-            disabled={loading}
-            style={{ padding: '10px 12px', borderRadius: 10, border: '0', background: '#16a34a', color: '#fff', fontWeight: 700 }}
-          >
-            Kích hoạt
-          </button>
-          <button
-            onClick={onRevoke}
-            disabled={loading}
-            style={{ padding: '10px 12px', borderRadius: 10, border: '0', background: '#dc2626', color: '#fff', fontWeight: 700 }}
-          >
-            Thu hồi
-          </button>
-          <button
-            onClick={onResetDevice}
-            disabled={loading}
-            style={{ padding: '10px 12px', borderRadius: 10, border: '0', background: '#f59e0b', color: '#111827', fontWeight: 700 }}
-          >
-            Reset thiết bị
-          </button>
-        </div>
-
+        {loading && <div style={{ color: '#475569' }}>Đang xử lý…</div>}
         {result && (
-          <div style={{ marginTop: 10, padding: 14, borderRadius: 10, background: result.success ? '#ecfdf5' : '#fef2f2', border: `1px solid ${result.success ? '#86efac' : '#fecaca'}` }}>
-            <div style={{ fontWeight: 800, color: result.success ? '#166534' : '#991b1b', marginBottom: 6 }}>
-              {result.success ? 'Thành công' : 'Thất bại'}
-            </div>
+          <div style={{ marginTop: 6, padding: 14, borderRadius: 10, background: result.success ? '#ecfdf5' : '#fef2f2', border: `1px solid ${result.success ? '#86efac' : '#fecaca'}` }}>
+            <div style={{ fontWeight: 800, color: result.success ? '#166534' : '#991b1b', marginBottom: 6 }}>{result.success ? 'Thành công' : 'Thất bại'}</div>
             {result.message && <div style={{ marginBottom: 6 }}>{result.message}</div>}
-            {result.data && (
-              <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                {JSON.stringify(result.data, null, 2)}
-              </div>
-            )}
+            {result.data && <pre style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(result.data, null, 2)}</pre>}
           </div>
         )}
-      </div>
+      </section>
 
-      <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
-        Gợi ý: Sau khi bấm kích hoạt, web khách sẽ tự gắn key với thiết bị đầu tiên khi kiểm tra. Nếu khách đổi máy, bấm “Reset thiết bị” để cho phép gắn lại thiết bị mới.
-      </div>
-    </div>
+      <p style={{ fontSize: 13, color: '#64748b' }}>
+        Khi đủ 3 trình duyệt hoặc khách đổi máy, bấm “Reset trình duyệt”; license vẫn giữ nguyên thời hạn và trạng thái.
+      </p>
+    </main>
   );
+}
+
+function buttonStyle(background: string, color = '#fff'): React.CSSProperties {
+  return { padding: '10px 12px', borderRadius: 10, border: 0, background, color, fontWeight: 700, cursor: 'pointer' };
 }
