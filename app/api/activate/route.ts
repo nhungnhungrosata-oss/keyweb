@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { authorizeAdminMutation } from "../../lib/admin-auth";
 
 async function parseAppsScriptResponse(resp: Response) {
   const text = await resp.text();
@@ -14,6 +15,9 @@ async function parseAppsScriptResponse(resp: Response) {
 }
 
 export async function POST(req: NextRequest) {
+  const unauthorized = authorizeAdminMutation(req);
+  if (unauthorized) return unauthorized;
+
   try {
     const payload = await req.json().catch(() => ({}));
     const { device_key, plan, custom_days, note } = payload;
@@ -42,6 +46,7 @@ export async function POST(req: NextRequest) {
         device_key: String(device_key).trim(),
         plan,
         custom_days,
+        max_installations: 3,
         note,
       }),
     });
