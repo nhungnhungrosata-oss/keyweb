@@ -1,18 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeAdminMutation } from "../../lib/admin-auth";
-
-async function parseAppsScriptResponse(resp: Response) {
-  const text = await resp.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    return {
-      ok: false,
-      error: "Apps Script không trả JSON",
-      raw: text.slice(0, 200),
-    };
-  }
-}
+import {
+  AppsScriptNonJsonError,
+  callAppsScriptMutation,
+  checkAppsScriptLicense,
+  confirmsReset,
+  recoveredSuccess,
+} from "../../lib/apps-script-admin.mjs";
 
 export async function POST(req: NextRequest) {
   const unauthorized = authorizeAdminMutation(req);
@@ -30,19 +24,25 @@ export async function POST(req: NextRequest) {
     if (!APPS_SCRIPT_URL) return NextResponse.json({ ok: false, error: "Thiếu ENV APPS_SCRIPT_URL" }, { status: 500 });
     if (!ADMIN_SECRET) return NextResponse.json({ ok: false, error: "Thiếu ENV ADMIN_SECRET" }, { status: 500 });
 
-    const resp = await fetch(`${APPS_SCRIPT_URL}?action=reset_device`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({
+    let data;
+    try {
+      data = await callAppsScriptMutation(APPS_SCRIPT_URL, {
         action: "reset_device",
         secret: ADMIN_SECRET,
         device_key: String(device_key).trim(),
-      }),
-    });
+      });
+    } catch (error) {
+      if (!(error instanceof AppsScriptNonJsonError)) throw error;
 
-    const data = await parseAppsScriptResponse(resp);
-    return NextResponse.json(data, { status: resp.ok ? 200 : 500 });
+      const verification = await checkAppsScriptLicense(APPS_SCRIPT_URL, device_key);
+      if (!confirmsReset(verification)) throw error;
+      data = recoveredSuccess(
+        verification,
+        "Đã reset trình duyệt thành công và xác minh lại trạng thái trên máy chủ.",
+      );
+    }
+
+    return NextResponse.json(data);
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: "Lỗi server", detail: String(e?.message || e) }, { status: 500 });
   }
